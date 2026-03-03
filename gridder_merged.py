@@ -6,7 +6,7 @@ from astropy.constants import c
 from astropy.io import fits
 import casacore.tables as tables
 from viscube import sigma_by_baseline_scan_time_diff
-from viscube.grid_cube import grid_cube_all_stats_wbinned, grid_cube_all_stats
+from viscube.grid_cube import grid_cube_all_stats_wbinned
 from typing import Tuple
 
 def to_npol_nchan_nrow(arr, npol_expected, nchan_expected, nrow_expected=None, name="array"):
@@ -57,20 +57,18 @@ def hermitian_augment_w(
     w0: np.ndarray,
     vis0: np.ndarray,
     weights0: np.ndarray,
-    sigma_re0: np.ndarray,
-    sigma_im0: np.ndarray,
     invvar_re0: np.ndarray,
     invvar_im0: np.ndarray,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+):
     """
     Hermitian augment:
-      (u, v, w, Re, Im, wgt, sigma_re, sigma_im, invvar_re, invvar_im)
+      (u, v, w, Re, Im, wgt, invvar_re, invvar_im)
       -> concat with
-      (-u, -v, -w, +Re, -Im, wgt, sigma_re, sigma_im, invvar_re, invvar_im)
+      (-u, -v, -w, +Re, -Im, wgt, invvar_re, invvar_im)
 
     Returns
     -------
-    uu, vv, ww, vis_re, vis_imag, wgt, sigma_re_aug, sigma_im_aug, invvar_re_aug, invvar_im_aug
+    uu, vv, ww, vis_re, vis_imag, wgt, invvar_re_aug, invvar_im_aug
     """
     # Hermitian augment in u,v,w + vis (IMPORTANT: w must flip sign too)
     uu = np.concatenate([u0, -u0], axis=0)
@@ -81,12 +79,10 @@ def hermitian_augment_w(
     wgt = np.concatenate([weights0, weights0], axis=0)
 
     # Variance does not change under sign flip/conjugation
-    sigma_re_aug = np.concatenate([sigma_re0, sigma_re0], axis=0)
-    sigma_im_aug = np.concatenate([sigma_im0, sigma_im0], axis=0)
     invvar_re_aug = np.concatenate([invvar_re0, invvar_re0], axis=0)
     invvar_im_aug = np.concatenate([invvar_im0, invvar_im0], axis=0)
 
-    return uu, vv, ww, vis_re, vis_im, wgt, sigma_re_aug, sigma_im_aug, invvar_re_aug, invvar_im_aug
+    return uu, vv, ww, vis_re, vis_im, wgt, invvar_re_aug, invvar_im_aug
 
 def gridder_AIO(jobname, msfolder, outputfolder):
 
@@ -305,8 +301,8 @@ def gridder_AIO(jobname, msfolder, outputfolder):
     pad_uv = 0.0
     FOV_arcsec = cell_size * npix # arcsec
 
-    uu, vv, ww, vis_re, vis_im, wt, sigma_re_aug, sigma_im_aug, invvar_re_aug, invvar_im_aug = hermitian_augment_w(
-        u0, v0, w0, vis0, weight0, sigma_re0, sigma_im0, invvar_re0, invvar_im0
+    uu, vv, ww, vis_re, vis_im, wt, invvar_re_aug, invvar_im_aug = hermitian_augment_w(
+        u0, v0, w0, vis0, weight0, invvar_re0, invvar_im0
     )
 
     UU = uu[None, :]
@@ -370,8 +366,7 @@ def gridder_AIO(jobname, msfolder, outputfolder):
 
     combined_vis_collapse = uv_re_collapse + 1j * uv_im_collapse
 
-    u_max = np.max(np.abs(uu))  # consistent with your previous fov calc
-    fov_arcseconds = 206265 * npix / (2.0 * u_max)
+    fov_arcseconds = FOV_arcsec
     arcseconds_per_pixel = fov_arcseconds / npix
     x_arcsec = (np.arange(npix) - (npix // 2)) * arcseconds_per_pixel
     y_arcsec = (np.arange(npix) - (npix // 2)) * arcseconds_per_pixel
